@@ -26,4 +26,8 @@ const users =
   }
 ]
 
+
 module.exports = users;
+module.exports.validation = function (pincode) {
+  return pincode.length < 6 || pincode.length > 6;
+};
