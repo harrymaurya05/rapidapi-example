@@ -23,10 +23,21 @@ conn.on ('error', function (err) {
     //If the connection is disconnected, automatically reconnect
     if(err.code === 'ECONNRESET'){
         handleError ();
+        console.log("reconnect due to ECONNRESET")
     }
     else if (err.code === 'PROTOCOL_CONNECTION_LOST') {
         handleError ();
-    } else {
+        console.log("reconnect due to PROTOCOL_CONNECTION_LOST")
+    }
+    else if (err.code === 'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR') {
+        handleError ();
+        console.log("reconnect due to PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR");
+        
+    }else if (err.code === 'PROTOCOL_ENQUEUE_AFTER_QUIT') {
+        handleError ();
+        console.log("reconnect due to PROTOCOL_ENQUEUE_AFTER_QUIT")
+    }  
+    else {
         throw err;
     }
 });

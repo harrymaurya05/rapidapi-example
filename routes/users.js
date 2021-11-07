@@ -4,6 +4,18 @@ const https = require('https');
 var router = express.Router();
 var users = require('../data/users');
 var conneciton  = require('../database/connection');
+
+
+function data(name,pincode, stateName, stateCode, District, countryName){
+  this.name = name;
+  this.pincode = pincode;
+  this.stateCode = stateCode;
+  this.stateName = stateName;
+  this.district = District;
+  this.countryName = countryName;
+  
+}
+
 /* GET users listing. */
 router.get('/', function(req, res, next) {
   var pincode = req.query.pincode;
@@ -23,28 +35,37 @@ router.get('/', function(req, res, next) {
     [pincode],(err,rows,fields)=>{
       if(!err){
         if(rows.length != 0){
+          var datas = [];
+          for(var j=0; j<rows.length; j++){
+            datas.push(new data(rows[j].name, rows[j].pincode, rows[j].state_name, rows[j].state_code, rows[j].District, rows[j].country_name));
+          }
           console.log("Pincode is present in database.");
-          res.send(rows);
+          res.status(200).json({Status:"Success" ,Message: 'Number of pincode(s) found: '+rows.length,data:datas });
         }else {
           console.log("Pincode is not present in database. Try to fetch using lookup.");
           var stateCode = zipCodeToStateCode(pincode);
           if(typeof stateCode !== 'undefined' && stateCode){
             console.log("Request Pincode present in lookup!!");
-            conneciton.query("select s.name from state s where iso2_code = ?",[stateCode],(err,rows,fields)=>{
+            conneciton.query("select s.name, s.country_code from state s where iso2_code = ?",[stateCode],(err,rows,fields)=>{
               if(!err){
                 var name = rows[0].name;
+                var countryCode = rows[0].country_code;
                 console.log(name);
-                conneciton.query("INSERT INTO `pincode`(`pincode`, `state_code`, `country_code`, `name`) VALUES (?,?,?,?)",[pincode,stateCode,'IN',name],(err,rows,fields)=>{
+                conneciton.query("INSERT INTO `pincode`(`pincode`, `state_code`, `country_code`, `name`) VALUES (?,?,?,?)",[pincode,stateCode,'IN',name],(err,insert,fields)=>{
                   if(!err){
                     console.log("Pincode fetched by lookup stored in database.");
-                    res.json(result);
+                    var datas = [];
+                    datas.push(new data(null, pincode, name, stateCode , null , countryCode));
+                    res.status(200).json({Status:"Success" ,Message: 'Number of pincode(s) found: '+rows.length,data:datas });
                   }else{
                     console.log(err)
                   }
+                  
                 });                
               }else{
                 console.log(err)
               }
+              
             })
             res.send(pincode);
           }else{
@@ -58,33 +79,49 @@ router.get('/', function(req, res, next) {
               });
               // The whole response has been received. Print out the result.
               resp.on("end", () => {
-                console.log(data);
+                console.log("Api Response : "+data);
                 var result = JSON.parse(data);
                 if(result[0].Status == 'Error'){
                   console.log("Requested pinode not present in database , not in lookup nor in api.")
-                  res.status(202).json({Status:"Error" ,Message: 'No records found',PostOffice:null });
+                  res.status(202).json({Status:"Error" ,Message: 'No records found',data:null });
                 }else{
-                  console.log("Request pincode presented in api length : "+result.length);
-                  console.log(result[0].PostOffice);
+                  console.log("Request pincode presented in api");
                   var postOffice = result[0].PostOffice;
-                  for (let i = 0; i < postOffice.length; i++){
-                    console.log(postOffice[i].State);
-                    conneciton.query("select s.iso2_code from state s where name = ?",[postOffice[i].State],(err,rows,fields)=>{
-                      if(!err){
-                          console.log(rows[0].iso2_code);
-                          conneciton.query("INSERT INTO `pincode`(`pincode`, `state_code`, `country_code`, `name`,`District`) VALUES (?,?,?,?,?)",[pincode,rows[0].iso2_code,'IN',postOffice[i].Name,postOffice[i].District],(err,rows,fields)=>{
+                  var datas = [];
+                  let stateCode;
+                  
+                  conneciton.query("select s.iso2_code from state s where name = ?",[postOffice[0].State],(err,rows,fields)=>{
+                    if(!err){
+                      stateCode = rows[0].iso2_code;
+                      for (let i = 0; i < postOffice.length; i++){
+                        let jsonObj = {
+                          "name": postOffice[i].Name,
+                          "pincode": pincode,
+                          "stateName": postOffice[i].State,
+                          "stateCode": stateCode,
+                          "district":postOffice[i].District,
+                          "countryName":postOffice[i].Country
+                        }                   
+                        datas.push(jsonObj);
+                      }
+                      for (let i = 0; i < postOffice.length; i++){
+                        conneciton.query("INSERT INTO `pincode`(`pincode`, `state_code`, `country_code`, `name`,`District`) VALUES (?,?,?,?,?)",[pincode,stateCode,'IN',postOffice[i].Name,postOffice[i].District],(err,rows,fields)=>{
                           if(!err){
-                              console.log("Api data stroe in database.");
+                            if(i == (postOffice.length-1)){
+                              console.log("Api data stroe in database."); 
+                            } 
                           }else{
                               console.log(err);
                           }
-                          }); 
-                      } else {
-                          console.log(err);
+                          
+                        }); 
                       }
-                    });
-                  }
-                  res.json(result);
+                      res.json({Status:"Success" ,Message: 'Number of pincode(s) found: '+postOffice.length,data:datas});
+                    }else {
+                      console.log(err);
+                    }
+                    
+                  });
                 }
               });
             })
@@ -99,6 +136,7 @@ router.get('/', function(req, res, next) {
       }else {
         console.log(err);
       }
+      
     })
     //res.json(pincode);
   }
